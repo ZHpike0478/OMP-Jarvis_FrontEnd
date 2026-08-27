@@ -18,10 +18,9 @@
         <span class="sub">Oh My Pi · <span id="omp-ver">…</span></span>
       </div>
     </div>
-    <div class="status">
-      <span class="pill" id="pill-model">model —</span>
-      <span class="pill" id="pill-thinking">thinking —</span>
-      <span class="pill" id="pill-session">session —</span>
+      <button id="btn-tts" class="pill-btn" title="Toggle spoken replies (Edge TTS)">🔊</button>
+      <span class="dot" id="dot-link" title="link"></span>
+    </div>
       <span class="dot" id="dot-link" title="link"></span>
     </div>
   </header>
@@ -31,7 +30,10 @@
       <div id="chat-log"></div>
       <div id="composer">
         <textarea id="chat-input" rows="1" placeholder="Directive, sir…  (Enter to send · Shift+Enter newline · / for commands)"></textarea>
-        <div id="composer-actions">
+          <button id="btn-mic" class="ghost" title="Speak your directive (Edge STT)">🎤</button>
+          <button id="btn-abort" class="ghost" title="Abort current turn">■ Abort</button>
+          <button id="btn-send" class="primary">Transmit</button>
+        </div>
           <button id="btn-abort" class="ghost" title="Abort current turn">■ Abort</button>
           <button id="btn-send" class="primary">Transmit</button>
         </div>

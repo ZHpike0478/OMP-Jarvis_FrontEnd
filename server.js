@@ -216,13 +216,30 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  if (p === '/api/cli' && req.method === 'POST') {
+  if (p === '/api/tts' && req.method === 'POST') {
     let body;
     try { body = JSON.parse(await readBody(req)); }
     catch { json(res, 400, { ok: false, error: 'bad json' }); return; }
-    const args = Array.isArray(body.args) ? body.args : [];
-    const result = await runCli(args);
-    json(res, 200, { ok: result.ok, ...result });
+    const text = String(body.text || '').trim();
+    if (!text) { json(res, 400, { ok: false, error: 'empty text' }); return; }
+    const voice = String(body.voice || 'en-US-ChristopherNeural');
+    const rate = String(body.rate || '+0%');
+    const tmp = path.join(os.tmpdir(), 'jarvis-tts-' + Date.now() + '-' + Math.random().toString(36).slice(2) + '.mp3');
+    const args = ['-m', 'edge_tts', '-t', text, '-v', voice, '--rate', rate, '--write-media', tmp];
+    const p = spawn('python', args, { windowsHide: true });
+    let err = '';
+    p.stderr.setEncoding('utf8');
+    p.stderr.on('data', (d) => { err += d; });
+    p.on('error', (e) => { json(res, 500, { ok: false, error: String(e.message || e) }); });
+    p.on('close', (code) => {
+      if (code !== 0) { json(res, 500, { ok: false, error: err.trim() || 'tts failed (code ' + code + ')' }); return; }
+      fs.readFile(tmp, (e2, data) => {
+        fs.unlink(tmp, () => {});
+        if (e2) { json(res, 500, { ok: false, error: e2.message }); return; }
+        res.writeHead(200, { 'Content-Type': 'audio/mpeg', 'Cache-Control': 'no-store' });
+        res.end(data);
+      });
+    });
     return;
   }
 

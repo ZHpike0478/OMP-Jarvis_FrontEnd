@@ -211,9 +211,17 @@ function onFrame(f) {
       resetAssistant();
       break;
 
-    case 'agent_end':
-      state.streaming = false;
-      setLink('on');
+      // Speak the final assistant text when TTS is on.
+      if (speech.ttsOn) {
+        const texts = (f.messages || [])
+          .filter((m) => m.role === 'assistant')
+          .flatMap((m) => (m.content || []).filter((b) => b.type === 'text').map((b) => b.text))
+          .filter(Boolean);
+        if (texts.length) speak(texts[texts.length - 1]);
+      }
+      resetAssistant();
+      refreshState();
+      break;
       resetAssistant();
       refreshState();
       break;
@@ -405,12 +413,111 @@ function connect() {
   };
 }
 
+/* ---------- speech (Edge STT/TTS) ---------- */
+const speech = {
+  ttsOn: false,
+  recOn: false,
+  recog: null,
+  voices: [],
+  voice: null,
+};
+
+function loadVoices() {
+  if (!('speechSynthesis' in window)) return;
+  speech.voices = window.speechSynthesis.getVoices();
+  const en = speech.voices.filter((v) => v.lang && v.lang.startsWith('en'));
+  speech.voice = en.find((v) => /en-US-(Christopher|Guy|Eric|Aria|Jenny)Neural/i.test(v.name))
+    || en.find((v) => /Neural/i.test(v.name))
+    || en[0]
+    || null;
+}
+if ('speechSynthesis' in window) {
+  loadVoices();
+  window.speechSynthesis.onvoiceschanged = loadVoices;
+}
+
+function speak(text) {
+  if (!speech.ttsOn) return;
+  if (!('speechSynthesis' in window)) return;
+  window.speechSynthesis.cancel();
+  const u = new SpeechSynthesisUtterance(text);
+  if (speech.voice) u.voice = speech.voice;
+  u.rate = 1.0;
+  u.pitch = 1.0;
+  window.speechSynthesis.speak(u);
+}
+
+function stopSpeaking() {
+  if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+}
+
+function toggleTts() {
+  speech.ttsOn = !speech.ttsOn;
+  $('btn-tts').classList.toggle('on', speech.ttsOn);
+  if (!speech.ttsOn) stopSpeaking();
+  toast(speech.ttsOn ? 'Spoken replies ON (Edge TTS)' : 'Spoken replies OFF');
+}
+
+function initStt() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) {
+    $('btn-mic').title = 'STT not supported in this browser — use Edge/Chrome';
+    $('btn-mic').disabled = true;
+    return;
+  }
+  speech.recog = new SR();
+  speech.recog.lang = 'en-US';
+  speech.recog.interimResults = true;
+  speech.recog.continuous = false;
+  speech.recog.onresult = (e) => {
+    let final = '';
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      if (e.results[i].isFinal) final += e.results[i][0].transcript;
+    }
+    if (final) {
+      chatInput.value = (chatInput.value ? chatInput.value + ' ' : '') + final.trim();
+      autosize();
+    }
+  };
+  speech.recog.onend = () => {
+    speech.recOn = false;
+    $('btn-mic').classList.remove('rec');
+    $('btn-mic').textContent = '🎤';
+  };
+  speech.recog.onerror = (e) => {
+    speech.recOn = false;
+    $('btn-mic').classList.remove('rec');
+    $('btn-mic').textContent = '🎤';
+    if (e.error !== 'aborted' && e.error !== 'no-speech') toast('STT error: ' + e.error);
+  };
+}
+
+function toggleMic() {
+  if (!speech.recog) return;
+  if (speech.recOn) {
+    speech.recog.stop();
+    return;
+  }
+  try {
+    speech.recog.start();
+    speech.recOn = true;
+    $('btn-mic').classList.add('rec');
+    $('btn-mic').textContent = '◉';
+    toast('Listening…');
+  } catch (e) {
+    toast('Mic error: ' + e.message);
+  }
+}
+
 /* ---------- wire up ---------- */
 $('btn-send').addEventListener('click', () => sendMessage(chatInput.value));
 $('btn-abort').addEventListener('click', async () => {
   await api('/api/cmd', { type: 'abort' });
   toast('Abort sent');
 });
+$('btn-tts').addEventListener('click', toggleTts);
+$('btn-mic').addEventListener('click', toggleMic);
+initStt();
 $('cli-run').addEventListener('click', runCli);
 cliInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); runCli(); } });
 

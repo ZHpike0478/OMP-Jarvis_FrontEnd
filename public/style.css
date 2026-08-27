@@ -74,12 +74,14 @@ body {
 
 .status { display: flex; align-items: center; gap: 10px; }
 
-.pill {
-  font-family: var(--mono); font-size: 11px; color: var(--cyan-dim);
-  border: 1px solid var(--line); border-radius: 20px;
-  padding: 4px 10px; background: rgba(0, 229, 255, 0.05);
-  max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+.pill-btn {
+  font-size: 13px; padding: 3px 9px; border-radius: 20px;
+  border: 1px solid var(--line); background: rgba(0, 229, 255, 0.05);
+  color: var(--cyan-dim); cursor: pointer; line-height: 1.2;
 }
+.pill-btn:hover { background: rgba(0, 229, 255, 0.18); box-shadow: 0 0 10px rgba(0, 229, 255, 0.25); }
+.pill-btn.on { background: rgba(0, 229, 255, 0.25); border-color: var(--line-strong); color: var(--cyan); box-shadow: 0 0 10px rgba(0, 229, 255, 0.4); }
+.pill-btn.rec { background: rgba(255, 92, 108, 0.25); border-color: var(--red); color: var(--red); box-shadow: 0 0 10px rgba(255, 92, 108, 0.5); animation: pulse 1s infinite; }
 
 .dot {
   width: 10px; height: 10px; border-radius: 50%;

@@ -36,15 +36,16 @@ A zero-dependency Node server that:
 - Spawns `omp --mode rpc --no-title` (the JSONL-over-stdio protocol)
 - Forwards every frame (streaming text, thinking, tool calls, todos, model changes) to browser clients over **SSE**
 - Exposes `/api/cmd` — proxies any RPC command (`prompt`, `abort`, `set_model`, `set_thinking_level`, `compact`, `bash`, …), so the **full CLI surface is reachable from the UI**
-- Exposes `/api/cli` — runs any `omp` subcommand as a one-shot process and returns its output
+- Exposes `/api/tts` — synthesizes speech via the `edge-tts` Python package (Microsoft Edge neural voices) and returns MP3 audio, for exact voice/rate control beyond the browser's built-in `speechSynthesis`
 - Auto-restarts the `omp` child if it crashes
 
 ### 3. The frontend (Jarvis HUD)
 
 A dark glass interface with a cyan core, grid backdrop, and monospace chrome:
 
-- **Chat** — streaming assistant text, thinking blocks, tool calls; Enter to send, `/` for live command hints
-- **Abort** — interrupt the current turn
+- **Voice input (STT)** — 🎤 mic button uses the browser's Web Speech API (Microsoft speech service in Edge/Chrome) to transcribe your directive into the composer
+- **Spoken replies (TTS)** — 🔊 toggle speaks the assistant's final answer using Edge neural voices (`speechSynthesis`); a server-side `/api/tts` endpoint (via `edge-tts`) is also available for exact voice control
+- **Tools panel** — live tool-execution cards with arguments and results
 - **Tools panel** — live tool-execution cards with arguments and results
 - **Todos** — the agent's plan phases/tasks rendered from `get_state`
 - **CLI panel** — run any `omp` subcommand with output in the panel
@@ -109,8 +110,7 @@ Environment variables (all optional):
 ```
 Browser (SSE)  <->  server.js  <->  omp --mode rpc (stdio JSONL)
                         |
-                        +-- /api/cmd  (prompt, abort, cycle_model, ...)
-                        +-- /api/cli  (any omp subcommand)
+                        +-- /api/tts  (edge-tts MP3 synthesis)
                         +-- /api/state (get_state)
 ```
 
