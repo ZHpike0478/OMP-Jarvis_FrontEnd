@@ -2,17 +2,43 @@
 /* Jarvis — Oh My Pi frontend bridge.
  * Spawns `omp --mode rpc` (JSONL over stdio), forwards every frame to
  * browser clients over SSE, and exposes command + CLI-passthrough endpoints.
+ * Also synthesizes Edge-TTS speech via the edge-tts Python package.
  * Zero dependencies: Node >= 18 only. */
+
 const http = require('http');
-const { spawn } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+const { spawn } = require('child_process');
 
 const PORT = Number(process.env.PORT || 8765);
 const HOST = process.env.HOST || '127.0.0.1';
 const OMP = process.env.OMP_BIN || 'omp';
 const CWD = process.env.OMP_CWD || process.cwd();
+const LOG_FILE = process.env.JARVIS_LOG
+  || (process.platform === 'win32'
+        ? path.join(os.tmpdir(), 'jarvis.log')
+        : path.join(process.env.HOME || os.tmpdir(), '.jarvis.log'));
+
+/* ---------- logging ---------- */
+let logFd = null;
+function openLog() {
+  try {
+    logFd = fs.openSync(LOG_FILE, 'a');
+  } catch (e) {
+    logFd = null;
+  }
+}
+function log(line) {
+  const stamped = '[' + new Date().toISOString() + '] ' + line;
+  console.log(stamped);
+  if (logFd != null) {
+    try { fs.writeSync(logFd, stamped + '\n'); } catch { /* drop */ }
+  }
+}
+process.on('uncaughtException', (e) => { log('uncaughtException: ' + (e.stack || e.message || e)); });
+process.on('unhandledRejection', (e) => { log('unhandledRejection: ' + (e && e.stack || e)); });
+
 const PUBLIC = path.join(__dirname, 'public');
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -28,23 +54,49 @@ const MIME = {
 let child = null;
 let childReady = false;
 let childBuf = '';
-let childSeq = 0;
-let pending = new Map(); // id -> { resolve, reject, timer }
 let seq = 0;
-const clients = new Set(); // SSE response objects
+const pending = new Map();
+const clients = new Set();
 
 function nextId() { return 'req_' + (++seq); }
 
+/* Resolve omp to an absolute path. As a Windows service the child does
+ * not inherit a user shell's PATH, so we probe common install locations. */
+function resolveOmp(binName) {
+  if (path.isAbsolute(binName)) return binName;
+  const homedir = os.homedir();
+  const probes = [
+    path.join(homedir, '.bun', 'bin', binName + (process.platform === 'win32' ? '.exe' : '')),
+    path.join(homedir, '.local', 'bin', binName),
+    '/usr/local/bin/' + binName,
+    '/opt/homebrew/bin/' + binName,
+  ];
+  for (const p of probes) {
+    try { if (fs.statSync(p).isFile()) return p; } catch { /* missing */ }
+  }
+  return binName; // rely on PATH
+}
+
 function startOmp() {
-  child = spawn(OMP, ['--mode', 'rpc', '--no-title'], {
-    cwd: CWD,
-    env: { ...process.env, PI_RPC_EMIT_TITLE: '1' },
-    stdio: ['pipe', 'pipe', 'pipe'],
-    windowsHide: true,
-  });
+  const ompBin = resolveOmp(OMP);
+  // Ensure the bun bin dir is on PATH so omp.exe can load its companions.
+  const bunBin = path.join(os.homedir(), '.bun', 'bin');
+  const sep = process.platform === 'win32' ? ';' : ':';
+  const env = { ...process.env, PI_RPC_EMIT_TITLE: '1', PATH: process.env.PATH ? process.env.PATH + sep + bunBin : bunBin };
+  try {
+    child = spawn(ompBin, ['--mode', 'rpc', '--no-title'], {
+      cwd: CWD,
+      env,
+      stdio: ['pipe', 'pipe', 'pipe'],
+      windowsHide: true,
+    });
+  } catch (e) {
+    log('failed to spawn omp: ' + e.message);
+    return;
+  }
   childReady = false;
   childBuf = '';
-  childSeq = 0;
+  child.on('error', (err) => log('omp error: ' + (err && err.message || err)));
 
   child.stdout.setEncoding('utf8');
   child.stdout.on('data', (chunk) => {
@@ -59,24 +111,17 @@ function startOmp() {
   });
 
   child.stderr.setEncoding('utf8');
-  child.stderr.on('data', (chunk) => {
-    broadcast({ type: 'rpc_stderr', text: chunk });
-  });
-
-  child.on('error', (err) => {
-    broadcast({ type: 'rpc_error', error: String(err && err.message || err) });
-  });
+  child.stderr.on('data', (chunk) => broadcast({ type: 'rpc_stderr', text: chunk }));
 
   child.on('exit', (code, signal) => {
     childReady = false;
+    log('omp exited code=' + code + ' signal=' + signal + ' — restarting in 500ms');
     broadcast({ type: 'rpc_exit', code, signal });
-    // Reject anything still pending.
     for (const [id, p] of pending) {
       clearTimeout(p.timer);
       p.reject(new Error('omp exited (code ' + code + ')'));
     }
     pending.clear();
-    // Auto-restart so the UI stays live.
     setTimeout(startOmp, 500);
   });
 }
@@ -84,10 +129,9 @@ function startOmp() {
 function handleFrame(line) {
   let obj;
   try { obj = JSON.parse(line); } catch { return; }
-  childSeq++;
   if (obj.type === 'ready') {
     childReady = true;
-    broadcast({ type: 'ready', protocolVersion: obj.protocolVersion, childSeq: childSeq });
+    broadcast({ type: 'ready', protocolVersion: obj.protocolVersion });
     return;
   }
   if (obj.type === 'response') {
@@ -101,16 +145,12 @@ function handleFrame(line) {
     broadcast(obj);
     return;
   }
-  // Everything else (events, ui requests, chunks, etc.) is forwarded raw.
   broadcast(obj);
 }
 
 function sendCommand(cmd) {
   return new Promise((resolve, reject) => {
-    if (!child || !childReady) {
-      reject(new Error('omp not ready'));
-      return;
-    }
+    if (!child || !childReady) { reject(new Error('omp not ready')); return; }
     const id = cmd.id || nextId();
     const frame = { ...cmd, id };
     const timer = setTimeout(() => {
@@ -132,11 +172,11 @@ function broadcast(obj) {
 /* ---------- CLI passthrough ---------- */
 function runCli(args) {
   return new Promise((resolve) => {
-    const p = spawn(OMP, args, {
-      cwd: CWD,
-      env: process.env,
-      windowsHide: true,
-    });
+    const ompBin = resolveOmp(OMP);
+    const bunBin = path.join(os.homedir(), '.bun', 'bin');
+    const sep = process.platform === 'win32' ? ';' : ':';
+    const env = { ...process.env, PATH: process.env.PATH ? process.env.PATH + sep + bunBin : bunBin };
+    const p = spawn(ompBin, args, { cwd: CWD, env, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
     let out = '';
     let err = '';
     p.stdout.setEncoding('utf8');
@@ -216,6 +256,16 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  if (p === '/api/cli' && req.method === 'POST') {
+    let body;
+    try { body = JSON.parse(await readBody(req)); }
+    catch { json(res, 400, { ok: false, error: 'bad json' }); return; }
+    const args = Array.isArray(body.args) ? body.args : [];
+    const result = await runCli(args);
+    json(res, 200, { ok: result.ok, ...result });
+    return;
+  }
+
   if (p === '/api/tts' && req.method === 'POST') {
     let body;
     try { body = JSON.parse(await readBody(req)); }
@@ -246,10 +296,10 @@ const server = http.createServer(async (req, res) => {
   if (p === '/api/status') {
     json(res, 200, {
       ok: true,
-      omp: OMP,
+      omp: resolveOmp(OMP),
       cwd: CWD,
       childReady,
-      childSeq,
+      log: LOG_FILE,
       clients: clients.size,
       node: process.version,
       platform: os.platform(),
@@ -260,10 +310,19 @@ const server = http.createServer(async (req, res) => {
   serveStatic(req, res, p);
 });
 
+openLog();
+log('Jarvis starting port=' + PORT + ' host=' + HOST + ' omp=' + resolveOmp(OMP) + ' cwd=' + CWD);
+
 server.listen(PORT, HOST, () => {
-  console.log(`Jarvis listening on http://${HOST}:${PORT}  (omp: ${OMP}, cwd: ${CWD})`);
+  log('Jarvis listening on http://' + HOST + ':' + PORT);
   startOmp();
 });
 
-process.on('SIGINT', () => { if (child) child.kill(); process.exit(0); });
-process.on('SIGTERM', () => { if (child) child.kill(); process.exit(0); });
+function shutdown(sig) {
+  log('received ' + sig + ' — shutting down');
+  try { if (child) child.kill(); } catch { /* drop */ }
+  server.close(() => process.exit(0));
+  setTimeout(() => process.exit(0), 2000).unref();
+}
+process.on('SIGINT', () => shutdown('SIGINT'));
+process.on('SIGTERM', () => shutdown('SIGTERM'));
