@@ -74,11 +74,13 @@ chmod +x install.sh
 ./install.sh
 ```
 
+The installer:
+
+1. Installs **Bun** if missing
+2. Installs the **Oh My Pi backend** (`bun add --global @oh-my-pi/pi-coding-agent`, which provides the `omp` CLI)
 3. Installs **Edge TTS** (`pip install edge-tts`) for server-side voice synthesis — skipped with a warning if Python is missing (TTS then falls back to the browser's built-in speech)
 4. Clones this repo to `~/jarvis` (or `%USERPROFILE%\jarvis` on Windows) — updates in place on re-run
-5. Starts the server
-3. Clones this repo to `~/jarvis` (or `%USERPROFILE%\jarvis` on Windows) — updates in place on re-run
-4. Starts the server
+5. **On Windows:** registers `OMP-Jarvis` as a service (`sc create`, auto-start) and starts it. Requires running `install.bat` as Administrator. **On macOS/Linux:** starts `node server.js` in the foreground.
 
 Then open **http://127.0.0.1:8765**.
 
@@ -88,6 +90,19 @@ Then open **http://127.0.0.1:8765**.
 cd ~/jarvis        # or wherever you cloned it
 node server.js     # or: npm start
 ```
+
+### Managing the Windows service
+
+```bat
+sc query   OMP-Jarvis   REM status, pid, uptime
+sc stop    OMP-Jarvis   REM stop (keeps registration)
+sc start   OMP-Jarvis   REM start again
+sc delete  OMP-Jarvis   REM full uninstall (stops + removes)
+```
+
+Logs: `%USERPROFILE%\jarvis\jarvis.log` (or `JARVIS_LOG` env var).
+
+The service runs under `LocalSystem`. `server.js` resolves `omp` to its absolute path and prepends `%USERPROFILE%\.bun\bin` to `PATH` on every child spawn, so it can find `omp.exe` and its companions even without a user shell's `PATH`.
 
 ## Configuration
 
