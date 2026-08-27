@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>JARVIS — Oh My Pi</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><circle cx='8' cy='8' r='6' fill='none' stroke='%2300e5ff' stroke-width='1.5'/><circle cx='8' cy='8' r='2' fill='%2300e5ff'/></svg>">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<div id="bg-grid"></div>
+<div id="app">
+  <header id="topbar">
+    <div class="brand">
+      <div class="core" id="core"></div>
+      <div class="brand-text">
+        <h1>JARVIS</h1>
+        <span class="sub">Oh My Pi · <span id="omp-ver">…</span></span>
+      </div>
+    </div>
+    <div class="status">
+      <span class="pill" id="pill-model">model —</span>
+      <span class="pill" id="pill-thinking">thinking —</span>
+      <span class="pill" id="pill-session">session —</span>
+      <span class="dot" id="dot-link" title="link"></span>
+    </div>
+  </header>
+
+  <main id="layout">
+    <section id="chat-pane">
+      <div id="chat-log"></div>
+      <div id="composer">
+        <textarea id="chat-input" rows="1" placeholder="Directive, sir…  (Enter to send · Shift+Enter newline · / for commands)"></textarea>
+        <div id="composer-actions">
+          <button id="btn-abort" class="ghost" title="Abort current turn">■ Abort</button>
+          <button id="btn-send" class="primary">Transmit</button>
+        </div>
+      </div>
+    </section>
+
+    <aside id="side">
+      <nav id="tabs">
+        <button class="tab active" data-tab="tools">Tools</button>
+        <button class="tab" data-tab="todos">Todos</button>
+        <button class="tab" data-tab="cli">CLI</button>
+        <button class="tab" data-tab="sys">System</button>
+      </nav>
+
+      <div id="panel-tools" class="panel active">
+        <div class="panel-head">
+          <span>Tool activity</span>
+          <span class="muted" id="tool-count">0</span>
+        </div>
+        <div id="tool-list"></div>
+      </div>
+
+      <div id="panel-todos" class="panel">
+        <div class="panel-head"><span>Plan</span></div>
+        <div id="todo-list"></div>
+      </div>
+
+      <div id="panel-cli" class="panel">
+        <div class="panel-head"><span>CLI passthrough</span></div>
+        <div class="cli-row">
+          <input id="cli-input" list="cli-commands" placeholder="omp models --json  ·  omp stats --summary  ·  omp models find claude">
+          <datalist id="cli-commands"></datalist>
+          <button id="cli-run">Run</button>
+        </div>
+        <pre id="cli-output" class="cli-out">—</pre>
+      </div>
+
+      <div id="panel-sys" class="panel">
+        <div class="panel-head"><span>System</span></div>
+        <div class="kv" id="sys-kv"></div>
+      </div>
+    </aside>
+  </main>
+</div>
+
+<div id="toast"></div>
+<script src="/app.js"></script>
+</body>
+</html>
