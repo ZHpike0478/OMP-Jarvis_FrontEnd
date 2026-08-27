@@ -44,7 +44,7 @@ A zero-dependency Node server that:
 A dark glass interface with a cyan core, grid backdrop, and monospace chrome:
 
 - **Voice input (STT)** — 🎤 mic button uses the browser's Web Speech API (Microsoft speech service in Edge/Chrome) to transcribe your directive into the composer
-- **Spoken replies (TTS)** — 🔊 toggle speaks the assistant's final answer using Edge neural voices (`speechSynthesis`); a server-side `/api/tts` endpoint (via `edge-tts`) is also available for exact voice control
+- **Spoken replies (TTS)** — 🔊 toggle speaks the assistant's final answer using Edge neural voices via the server-side `/api/tts` endpoint (`edge-tts`), with automatic fallback to the browser's built-in `speechSynthesis`; a voice selector offers 10 Edge neural voices
 - **Tools panel** — live tool-execution cards with arguments and results
 - **Tools panel** — live tool-execution cards with arguments and results
 - **Todos** — the agent's plan phases/tasks rendered from `get_state`
@@ -55,11 +55,7 @@ A dark glass interface with a cyan core, grid backdrop, and monospace chrome:
 
 ---
 
-## Requirements
-
-- **Node.js 18+** (any recent LTS)
-- **Bun** (installed automatically by the installer if missing)
-- **Git** (used by the installer to clone/update the frontend)
+- **Python 3.8+** (optional — enables server-side Edge TTS; without it, spoken replies fall back to the browser's built-in speech)
 
 ## Install & run
 
@@ -78,10 +74,9 @@ chmod +x install.sh
 ./install.sh
 ```
 
-The installer:
-
-1. Installs **Bun** if missing
-2. Installs the **Oh My Pi backend** (`bun add --global @oh-my-pi/pi-coding-agent`, which provides the `omp` CLI)
+3. Installs **Edge TTS** (`pip install edge-tts`) for server-side voice synthesis — skipped with a warning if Python is missing (TTS then falls back to the browser's built-in speech)
+4. Clones this repo to `~/jarvis` (or `%USERPROFILE%\jarvis` on Windows) — updates in place on re-run
+5. Starts the server
 3. Clones this repo to `~/jarvis` (or `%USERPROFILE%\jarvis` on Windows) — updates in place on re-run
 4. Starts the server
 

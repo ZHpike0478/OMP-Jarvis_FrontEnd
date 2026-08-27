@@ -41,8 +41,50 @@ if errorlevel 1 (
   pause
   exit /b 1
 )
-echo       omp version: 
-omp --version
+REM ---------- 3. Install Edge TTS (voice) ----------
+echo.
+echo [3/5] Installing Edge TTS (voice)...
+where python >nul 2>nul
+if errorlevel 1 (
+  echo       WARNING: python not found - server TTS will fall back to browser speech.
+  echo       Install Python from https://python.org then rerun this script.
+) else (
+  python -m pip install --quiet --upgrade edge-tts
+  if errorlevel 1 (
+    echo       WARNING: edge-tts install failed - server TTS will fall back to browser speech.
+  ) else (
+    echo       edge-tts installed.
+  )
+)
+
+REM ---------- 4. Fetch Jarvis frontend ----------
+echo.
+echo [4/5] Fetching Jarvis frontend...
+set "JARVIS_DIR=%USERPROFILE%\jarvis"
+if exist "%JARVIS_DIR%" (
+  echo       Existing install found at %JARVIS_DIR% - updating...
+  pushd "%JARVIS_DIR%"
+  git pull --ff-only
+  if errorlevel 1 (
+    echo       WARNING: git pull failed - keeping existing files.
+  )
+  popd
+) else (
+  git clone https://github.com/ZHpike0478/OMP-Jarvis_FrontEnd.git "%JARVIS_DIR%"
+  if errorlevel 1 (
+    echo ERROR: clone failed. Check the URL and your network.
+    pause
+    exit /b 1
+  )
+)
+
+REM ---------- 5. Start ----------
+echo.
+echo [5/5] Starting Jarvis at http://127.0.0.1:8765
+echo       Press Ctrl+C to stop.
+echo.
+cd /d "%JARVIS_DIR%"
+node server.js
 
 REM ---------- 3. Fetch Jarvis frontend ----------
 echo.
