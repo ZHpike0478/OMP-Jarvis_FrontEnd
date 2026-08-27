@@ -49,9 +49,18 @@ fi
 echo
 echo "[4/5] Fetching Jarvis frontend..."
 JARVIS_DIR="${JARVIS_DIR:-$HOME/jarvis}"
-if [ -d "$JARVIS_DIR" ]; then
+if [ -d "$JARVIS_DIR/.git" ]; then
   echo "      Existing install found at $JARVIS_DIR - updating..."
   git -C "$JARVIS_DIR" pull --ff-only || echo "      WARNING: git pull failed - keeping existing files."
+elif [ -d "$JARVIS_DIR" ]; then
+  if [ -z "$(ls -A "$JARVIS_DIR" 2>/dev/null)" ]; then
+    rmdir "$JARVIS_DIR"
+  else
+    echo "      $JARVIS_DIR exists but is not a Jarvis install - removing..."
+    rm -rf "$JARVIS_DIR"
+  fi
+  git clone https://github.com/ZHpike0478/OMP-Jarvis_FrontEnd.git "$JARVIS_DIR" \
+    || { echo "ERROR: clone failed"; exit 1; }
 else
   git clone https://github.com/ZHpike0478/OMP-Jarvis_FrontEnd.git "$JARVIS_DIR"
 fi

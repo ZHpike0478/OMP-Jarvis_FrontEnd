@@ -74,7 +74,7 @@ REM ---------- 4. Fetch Jarvis frontend ----------
 echo.
 echo [4/5] Fetching Jarvis frontend...
 set "JARVIS_DIR=%USERPROFILE%\jarvis"
-if exist "%JARVIS_DIR%\server.js" (
+if exist "%JARVIS_DIR%\.git" (
   echo       Existing install found at %JARVIS_DIR% - updating...
   pushd "%JARVIS_DIR%"
   git pull --ff-only
@@ -83,6 +83,14 @@ if exist "%JARVIS_DIR%\server.js" (
   )
   popd
 ) else (
+  if exist "%JARVIS_DIR%" (
+    if not exist "%JARVIS_DIR%\*" (
+      rmdir "%JARVIS_DIR%"
+    ) else (
+      echo       %JARVIS_DIR% exists but is not a Jarvis install - removing...
+      rmdir /s /q "%JARVIS_DIR%"
+    )
+  )
   git clone https://github.com/ZHpike0478/OMP-Jarvis_FrontEnd.git "%JARVIS_DIR%"
   if errorlevel 1 (
     echo ERROR: clone failed. Check the URL and your network.
