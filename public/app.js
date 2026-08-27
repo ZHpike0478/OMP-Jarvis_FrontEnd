@@ -418,36 +418,77 @@ const speech = {
   ttsOn: false,
   recOn: false,
   recog: null,
-  voices: [],
-  voice: null,
+  voice: 'en-US-ChristopherNeural',
+  audio: null,      // current playback element
+  fallback: false,  // true when server TTS unavailable -> speechSynthesis
 };
 
-function loadVoices() {
-  if (!('speechSynthesis' in window)) return;
-  speech.voices = window.speechSynthesis.getVoices();
-  const en = speech.voices.filter((v) => v.lang && v.lang.startsWith('en'));
-  speech.voice = en.find((v) => /en-US-(Christopher|Guy|Eric|Aria|Jenny)Neural/i.test(v.name))
-    || en.find((v) => /Neural/i.test(v.name))
-    || en[0]
-    || null;
-}
-if ('speechSynthesis' in window) {
-  loadVoices();
-  window.speechSynthesis.onvoiceschanged = loadVoices;
+const TTS_VOICES = [
+  ['en-US-ChristopherNeural', 'Christopher (US, male)'],
+  ['en-US-GuyNeural', 'Guy (US, male)'],
+  ['en-US-EricNeural', 'Eric (US, male)'],
+  ['en-US-AriaNeural', 'Aria (US, female)'],
+  ['en-US-JennyNeural', 'Jenny (US, female)'],
+  ['en-US-EmmaMultilingualNeural', 'Emma (US, multilingual)'],
+  ['en-GB-RyanNeural', 'Ryan (UK, male)'],
+  ['en-GB-SoniaNeural', 'Sonia (UK, female)'],
+  ['en-AU-WilliamNeural', 'William (AU, male)'],
+  ['en-AU-NatashaNeural', 'Natasha (AU, female)'],
+];
+
+function populateVoices() {
+  const sel = $('tts-voice');
+  sel.innerHTML = '';
+  for (const [id, label] of TTS_VOICES) {
+    const opt = document.createElement('option');
+    opt.value = id;
+    opt.textContent = label;
+    sel.appendChild(opt);
+  }
+  sel.value = speech.voice;
 }
 
 function speak(text) {
   if (!speech.ttsOn) return;
-  if (!('speechSynthesis' in window)) return;
-  window.speechSynthesis.cancel();
-  const u = new SpeechSynthesisUtterance(text);
-  if (speech.voice) u.voice = speech.voice;
-  u.rate = 1.0;
-  u.pitch = 1.0;
-  window.speechSynthesis.speak(u);
+  stopSpeaking();
+  const clean = String(text).trim();
+  if (!clean) return;
+  // Server path: edge-tts MP3 via /api/tts.
+  fetch('/api/tts', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text: clean, voice: speech.voice, rate: '+0%' }),
+  })
+    .then((r) => {
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.blob();
+    })
+    .then((blob) => {
+      const url = URL.createObjectURL(blob);
+      const a = new Audio(url);
+      speech.audio = a;
+      a.onended = () => { URL.revokeObjectURL(url); speech.audio = null; };
+      a.onerror = () => { URL.revokeObjectURL(url); speech.audio = null; };
+      a.play().catch(() => {});
+    })
+    .catch(() => {
+      // Fallback: browser speechSynthesis (Edge neural voices).
+      speech.fallback = true;
+      if (!('speechSynthesis' in window)) return;
+      const u = new SpeechSynthesisUtterance(clean);
+      const en = window.speechSynthesis.getVoices().filter((v) => v.lang && v.lang.startsWith('en'));
+      const v = en.find((x) => /Neural/i.test(x.name)) || en[0];
+      if (v) u.voice = v;
+      u.rate = 1.0;
+      window.speechSynthesis.speak(u);
+    });
 }
 
 function stopSpeaking() {
+  if (speech.audio) {
+    speech.audio.pause();
+    speech.audio = null;
+  }
   if ('speechSynthesis' in window) window.speechSynthesis.cancel();
 }
 
@@ -515,9 +556,12 @@ $('btn-abort').addEventListener('click', async () => {
   await api('/api/cmd', { type: 'abort' });
   toast('Abort sent');
 });
-$('btn-tts').addEventListener('click', toggleTts);
-$('btn-mic').addEventListener('click', toggleMic);
-initStt();
+$('tts-voice').addEventListener('change', (e) => {
+  speech.voice = e.target.value;
+  toast('TTS voice: ' + e.target.selectedOptions[0].textContent);
+});
+populateVoices();
+$('cli-run').addEventListener('click', runCli);
 $('cli-run').addEventListener('click', runCli);
 cliInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); runCli(); } });
 
